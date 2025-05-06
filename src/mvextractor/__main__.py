@@ -9,8 +9,55 @@ import cv2
 
 from mvextractor.videocap import VideoCap
 
+'''
+The JSON will look like:
+[
+	{
+		"source" : <val>,
+		"mb_w"  : <val>,
+		"mb_h" : <val>,
+		"src_x"  : <val>,
+		"src_y"  : <val>,
+		"dst_x"  : <val>,
+		"dst_y"  : <val>,
+		"motion_x"  : <val>,
+		"motion_y"  : <val>,
+     "motion_scale"  : <val>
+	},
+ ...
+]
+'''
 
-def draw_motion_vectors(frame, motion_vectors):
+def dump_motion_vectors(file_path, motion_vectors):
+    print(f"Type of motion_vectors: {type(motion_vectors)}")
+    print(f"Shape of motion_vectors: {np.shape(motion_vectors)}")
+
+    # dump motion vectors to json file
+    with open(file_path, "w") as f:
+        f.write("[\n")
+        for i, mv in enumerate(motion_vectors):
+            f.write("\t{\n")
+            f.write(f'\t\t"source" : {mv[0]},\n')
+            f.write(f'\t\t"mb_w" : {mv[1]},\n')
+            f.write(f'\t\t"mb_h" : {mv[2]},\n')
+            f.write(f'\t\t"src_x" : {mv[3]},\n')
+            f.write(f'\t\t"src_y" : {mv[4]},\n')
+            f.write(f'\t\t"dst_x" : {mv[5]},\n')
+            f.write(f'\t\t"dst_y" : {mv[6]},\n')
+            f.write(f'\t\t"motion_x" : {mv[7]},\n')
+            f.write(f'\t\t"motion_y" : {mv[8]},\n')
+            f.write(f'\t\t"motion_scale" : {mv[9]}\n')
+            f.write("\t}")
+            if i < len(motion_vectors) - 1:
+                f.write(",")
+            f.write("\n")
+        f.write("]\n")
+
+
+def draw_motion_vectors(frame, motion_vectors, file_path=""):
+    if file_path:
+        f = open(file_path, "w")
+
     if len(motion_vectors) > 0:
         num_mvs = np.shape(motion_vectors)[0]
         shift = 2
@@ -18,7 +65,11 @@ def draw_motion_vectors(frame, motion_vectors):
         for mv in np.split(motion_vectors, num_mvs):
             start_pt = (int((mv[0, 5] + mv[0, 7] / mv[0, 9]) * factor + 0.5), int((mv[0, 6] + mv[0, 8] / mv[0, 9]) * factor + 0.5))
             end_pt = (mv[0, 5] * factor, mv[0, 6] * factor)
+            if file_path:
+                f.write(f"{int(start_pt[0]), int(start_pt[1])}, {int(end_pt[0]), int(end_pt[1])}\n")
             cv2.arrowedLine(frame, start_pt, end_pt, (0, 0, 255), 1, cv2.LINE_AA, shift, 0.1)
+    if file_path:
+        f.close()
     return frame
 
 
@@ -34,12 +85,20 @@ def main(args=None):
         help='dump frames, motion vectors, frame types, and timestamps to optionally specified output directory')
     args = parser.parse_args()
 
+    # Extract name of the video file
+    video_name = args.video_url.split("/")[-1].split(".")[0]
+
     if args.dump:
         if isinstance(args.dump, str):
             dumpdir = args.dump
         else:
-            dumpdir = f"out-{datetime.now().strftime('%Y-%m-%dT%H:%M:%S')}"
-        for child in ["frames", "motion_vectors"]:
+            # dumpdir = f"out-{datetime.now().strftime('%Y-%m-%dT%H:%M:%S')}"
+            dumpdir = os.path.join("outputs", video_name)
+            if os.path.exists(dumpdir):
+                # remove existing directory, even if it is not empty
+                os.system(f"rm -rf {dumpdir}")
+        os.makedirs(dumpdir, exist_ok=True)
+        for child in ["frames", "motion_vectors", "json"]:
             os.makedirs(os.path.join(dumpdir, child), exist_ok=True)
 
     cap = VideoCap()
@@ -85,7 +144,9 @@ def main(args=None):
             print("motion vectors: {} | ".format(np.shape(motion_vectors)), end=" ")
             print("elapsed time: {} s".format(telapsed))
 
-        frame = draw_motion_vectors(frame, motion_vectors)
+        dump_motion_vectors(os.path.join(dumpdir, "json", f"{step}.json"), motion_vectors)
+
+        frame = draw_motion_vectors(frame, motion_vectors, os.path.join(dumpdir, "motion_vectors", f"draw-{step}.txt"))
 
         # store motion vectors, frames, etc. in output directory
         if args.dump:

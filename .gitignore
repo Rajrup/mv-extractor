@@ -11,3 +11,8 @@ out-*/
 
 *.tar
 a.out
+
+outputs/
+output/
+
+lib/ffmpeg-4.1.3/
